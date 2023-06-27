@@ -1,0 +1,572 @@
+classdef testApp < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                 matlab.ui.Figure
+        Button_1                 matlab.ui.control.Button
+        Button_2                 matlab.ui.control.Button
+        Button_3                 matlab.ui.control.Button
+        Button_A                 matlab.ui.control.Button
+        Button_4                 matlab.ui.control.Button
+        Button_5                 matlab.ui.control.Button
+        Button_6                 matlab.ui.control.Button
+        Button_B                 matlab.ui.control.Button
+        Button_7                 matlab.ui.control.Button
+        Button_8                 matlab.ui.control.Button
+        Button_9                 matlab.ui.control.Button
+        Button_C                 matlab.ui.control.Button
+        Button_M                 matlab.ui.control.Button
+        Button_0                 matlab.ui.control.Button
+        Button_N                 matlab.ui.control.Button
+        Button_D                 matlab.ui.control.Button
+        UIAxes_time_domain       matlab.ui.control.UIAxes
+        UIAxes_frequency_domain  matlab.ui.control.UIAxes
+        UIAxes_receive_signal_1  matlab.ui.control.UIAxes
+        receivestrLabel          matlab.ui.control.Label
+        TextArea_receive_str     matlab.ui.control.TextArea
+        SNRdBEditFieldLabel      matlab.ui.control.Label
+        SNRdBEditField           matlab.ui.control.NumericEditField
+        Button_10                matlab.ui.control.Button
+    end
+
+    
+    properties (Access = private)
+        SNRdB = 6; % 信噪比(dB)
+        signal = []; % 原始信号
+        noisy_signal = []; % 加噪信号
+        frequency_signal = []; % 频域信号
+        str = '';
+    end
+    
+    methods (Access = private)
+        
+        function [dtmf]=generate_DTMF_signal(app,row,col)
+            frequency_LL=[697 770 852 941];
+            frequency_HH=[1209 1336 1477 1633];
+            f_LL=frequency_LL(row);
+            f_HH=frequency_HH(col);
+            f_sample=8000;
+            t_sample=1/8000;
+            T1=0.05;
+            T2=0.05;
+            N1=T1/t_sample;
+            N2=T2/t_sample;
+            y1=zeros(1,N1+N2);
+            y2=zeros(1,N1+N2);
+            coef=2*pi*f_LL/f_sample;
+            a1=2*cos(coef);
+            b0=sin(coef);
+            y1(1)=b0;
+            y1(2)=0;
+            app.SNRdB = app.SNRdBEditField.Value;
+            for n=3:N1
+                y1(n)=a1*y1(n-1)-y1(n-2);
+            end
+            coef=2*pi*f_HH/f_sample;
+            %a1=2*cos(coef);
+            b0=sin(coef);
+            y2(1)=b0;
+            y2(2)=0;
+            %a1=2*cos(coef);
+            for n=3:N1
+                y2(n)=2*cos(coef)*y2(n-1)-y2(n-2);
+            end
+            dtmf=y1+y2;
+        end
+        
+        function [MF_out,identifyed_str] = DTMF_recieve(app,zz)
+            
+            frequency_LL=[697 770 852 941];
+            frequency_HH=[1209 1336 1477 1633];
+            symbols=['1' '2' '3' 'a' ;'4' '5' '6' 'b' ;'7' '8' '9' 'c';'*' '0' '#' 'd'];
+            t_symbol=0.1;
+            f_sample=8000;
+            t_sample=1/f_sample;
+            zzz=zz;
+            NN1=t_symbol/t_sample;
+            NN2=NN1/2;
+            MF_out = [];
+            for k=1:4
+                ss(1)=1;
+                ss(2)=0;
+                coef=2*pi*frequency_LL(k)/f_sample;
+                b0=sin(coef);
+                a1=2*cos(coef);
+                for n=3:NN1
+                    ss(n)=a1*ss(n-1)-ss(n-2)+b0 * zzz(n);
+                end
+                MF_out=[MF_out;ss];
+                XX(k)=0;
+                for tt=1:5
+                    XX(k)=XX(k)+ss(NN2-tt)*ss(NN2-tt);
+                end
+                XX(k)
+            end
+            for k=1:4
+                ss(1)=1;
+                ss(2)=0;
+                coef=2*pi*frequency_HH(k)/f_sample;
+                b0=sin(coef);
+                a1=2*cos(coef);
+                for n=3:NN1
+                    ss(n)=a1*ss(n-1)-ss(n-2)+b0 * zzz(n);
+                end
+                MF_out=[MF_out;ss];
+                YY(k)=0;
+                for tt=1:10
+                    YY(k)=YY(k)+ss(NN2-tt)*ss(NN2-tt);
+                end
+            end
+            [xxx,row_r] =max(XX);
+            [yyy,col_r] = max(YY);
+            identifyed_str=symbols(row_r,col_r);
+        end
+    end
+    
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Button pushed function: Button_1
+        function Button_1Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,1,1);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_2
+        function Button_2Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,1,2);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_3
+        function Button_3Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,1,3);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_A
+        function Button_APushed(app, event)
+            app.signal = generate_DTMF_signal(app,1,4);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_4
+        function Button_4Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,2,1);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_5
+        function Button_5Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,2,2);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_6
+        function Button_6Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,2,3);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_B
+        function Button_BPushed(app, event)
+            app.signal = generate_DTMF_signal(app,2,4);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_7
+        function Button_7Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,3,1);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_8
+        function Button_8Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,3,2);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_9
+        function Button_9Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,3,3);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_C
+        function Button_CPushed(app, event)
+            app.signal = generate_DTMF_signal(app,3,4);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_M
+        function Button_MPushed(app, event)
+            app.signal = generate_DTMF_signal(app,4,1);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_0
+        function Button_0Pushed(app, event)
+            app.signal = generate_DTMF_signal(app,4,2);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_N
+        function Button_NPushed(app, event)
+            app.signal = generate_DTMF_signal(app,4,3);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_D
+        function Button_DPushed(app, event)
+            app.signal = generate_DTMF_signal(app,4,4);
+            app.noisy_signal = awgn(app.signal,power(10,app.SNRdB/10),'measured');
+            app.frequency_signal = fft(app.noisy_signal);
+            player = audioplayer(app.noisy_signal,8000);
+            play(player);
+            [MF_out,identifyed_str] = DTMF_recieve(app,app.noisy_signal);
+            plot(app.UIAxes_time_domain,app.noisy_signal);
+            plot(app.UIAxes_frequency_domain,abs(app.frequency_signal));
+            plot(app.UIAxes_receive_signal_1,MF_out);
+            app.str = [app.str identifyed_str];
+            app.TextArea_receive_str.Value = app.str;
+        end
+
+        % Button pushed function: Button_10
+        function Button_10Pushed(app, event)
+            app.str = '';
+            app.TextArea_receive_str.Value = app.str;
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 761 567];
+            app.UIFigure.Name = 'UI Figure';
+
+            % Create Button_1
+            app.Button_1 = uibutton(app.UIFigure, 'push');
+            app.Button_1.ButtonPushedFcn = createCallbackFcn(app, @Button_1Pushed, true);
+            app.Button_1.Position = [573 508 36 36];
+            app.Button_1.Text = '1';
+
+            % Create Button_2
+            app.Button_2 = uibutton(app.UIFigure, 'push');
+            app.Button_2.ButtonPushedFcn = createCallbackFcn(app, @Button_2Pushed, true);
+            app.Button_2.Position = [614 508 36 36];
+            app.Button_2.Text = '2';
+
+            % Create Button_3
+            app.Button_3 = uibutton(app.UIFigure, 'push');
+            app.Button_3.ButtonPushedFcn = createCallbackFcn(app, @Button_3Pushed, true);
+            app.Button_3.Position = [655 508 36 36];
+            app.Button_3.Text = '3';
+
+            % Create Button_A
+            app.Button_A = uibutton(app.UIFigure, 'push');
+            app.Button_A.ButtonPushedFcn = createCallbackFcn(app, @Button_APushed, true);
+            app.Button_A.Position = [696 508 36 36];
+            app.Button_A.Text = 'A';
+
+            % Create Button_4
+            app.Button_4 = uibutton(app.UIFigure, 'push');
+            app.Button_4.ButtonPushedFcn = createCallbackFcn(app, @Button_4Pushed, true);
+            app.Button_4.Position = [573 467 36 36];
+            app.Button_4.Text = '4';
+
+            % Create Button_5
+            app.Button_5 = uibutton(app.UIFigure, 'push');
+            app.Button_5.ButtonPushedFcn = createCallbackFcn(app, @Button_5Pushed, true);
+            app.Button_5.Position = [614 467 36 36];
+            app.Button_5.Text = '5';
+
+            % Create Button_6
+            app.Button_6 = uibutton(app.UIFigure, 'push');
+            app.Button_6.ButtonPushedFcn = createCallbackFcn(app, @Button_6Pushed, true);
+            app.Button_6.Position = [655 467 36 36];
+            app.Button_6.Text = '6';
+
+            % Create Button_B
+            app.Button_B = uibutton(app.UIFigure, 'push');
+            app.Button_B.ButtonPushedFcn = createCallbackFcn(app, @Button_BPushed, true);
+            app.Button_B.Position = [696 467 36 36];
+            app.Button_B.Text = 'B';
+
+            % Create Button_7
+            app.Button_7 = uibutton(app.UIFigure, 'push');
+            app.Button_7.ButtonPushedFcn = createCallbackFcn(app, @Button_7Pushed, true);
+            app.Button_7.Position = [573 426 36 36];
+            app.Button_7.Text = '7';
+
+            % Create Button_8
+            app.Button_8 = uibutton(app.UIFigure, 'push');
+            app.Button_8.ButtonPushedFcn = createCallbackFcn(app, @Button_8Pushed, true);
+            app.Button_8.Position = [614 426 36 36];
+            app.Button_8.Text = '8';
+
+            % Create Button_9
+            app.Button_9 = uibutton(app.UIFigure, 'push');
+            app.Button_9.ButtonPushedFcn = createCallbackFcn(app, @Button_9Pushed, true);
+            app.Button_9.Position = [655 426 36 36];
+            app.Button_9.Text = '9';
+
+            % Create Button_C
+            app.Button_C = uibutton(app.UIFigure, 'push');
+            app.Button_C.ButtonPushedFcn = createCallbackFcn(app, @Button_CPushed, true);
+            app.Button_C.Position = [696 426 36 36];
+            app.Button_C.Text = 'C';
+
+            % Create Button_M
+            app.Button_M = uibutton(app.UIFigure, 'push');
+            app.Button_M.ButtonPushedFcn = createCallbackFcn(app, @Button_MPushed, true);
+            app.Button_M.Position = [573 385 36 36];
+            app.Button_M.Text = '*';
+
+            % Create Button_0
+            app.Button_0 = uibutton(app.UIFigure, 'push');
+            app.Button_0.ButtonPushedFcn = createCallbackFcn(app, @Button_0Pushed, true);
+            app.Button_0.Position = [614 385 36 36];
+            app.Button_0.Text = '0';
+
+            % Create Button_N
+            app.Button_N = uibutton(app.UIFigure, 'push');
+            app.Button_N.ButtonPushedFcn = createCallbackFcn(app, @Button_NPushed, true);
+            app.Button_N.Position = [655 385 36 36];
+            app.Button_N.Text = '#';
+
+            % Create Button_D
+            app.Button_D = uibutton(app.UIFigure, 'push');
+            app.Button_D.ButtonPushedFcn = createCallbackFcn(app, @Button_DPushed, true);
+            app.Button_D.Position = [696 385 36 36];
+            app.Button_D.Text = 'D';
+
+            % Create UIAxes_time_domain
+            app.UIAxes_time_domain = uiaxes(app.UIFigure);
+            title(app.UIAxes_time_domain, 'time domain')
+            xlabel(app.UIAxes_time_domain, '')
+            ylabel(app.UIAxes_time_domain, '')
+            app.UIAxes_time_domain.XLim = [0 800];
+            app.UIAxes_time_domain.XTick = [0 200 400 600 800];
+            app.UIAxes_time_domain.XTickLabel = {'0'; '200'; '400'; '600'; '800'};
+            app.UIAxes_time_domain.TitleFontWeight = 'bold';
+            app.UIAxes_time_domain.Position = [1 385 258 166];
+
+            % Create UIAxes_frequency_domain
+            app.UIAxes_frequency_domain = uiaxes(app.UIFigure);
+            title(app.UIAxes_frequency_domain, 'frequency domain')
+            xlabel(app.UIAxes_frequency_domain, '')
+            ylabel(app.UIAxes_frequency_domain, '')
+            app.UIAxes_frequency_domain.XLim = [0 800];
+            app.UIAxes_frequency_domain.XTick = [0 200 400 600 800];
+            app.UIAxes_frequency_domain.XTickLabel = {'0'; '200'; '400'; '600'; '800'};
+            app.UIAxes_frequency_domain.TitleFontWeight = 'bold';
+            app.UIAxes_frequency_domain.Position = [270 385 258 166];
+
+            % Create UIAxes_receive_signal_1
+            app.UIAxes_receive_signal_1 = uiaxes(app.UIFigure);
+            title(app.UIAxes_receive_signal_1, 'MF out')
+            xlabel(app.UIAxes_receive_signal_1, '')
+            ylabel(app.UIAxes_receive_signal_1, '')
+            app.UIAxes_receive_signal_1.XTick = [0 2 4 6 8];
+            app.UIAxes_receive_signal_1.XTickLabel = {'0'; '2'; '4'; '6'; '8'};
+            app.UIAxes_receive_signal_1.TitleFontWeight = 'bold';
+            app.UIAxes_receive_signal_1.Position = [1 236 258 166];
+
+            % Create receivestrLabel
+            app.receivestrLabel = uilabel(app.UIFigure);
+            app.receivestrLabel.HorizontalAlignment = 'right';
+            app.receivestrLabel.Position = [258 352 61 22];
+            app.receivestrLabel.Text = 'receive str';
+
+            % Create TextArea_receive_str
+            app.TextArea_receive_str = uitextarea(app.UIFigure);
+            app.TextArea_receive_str.Position = [334 351 150 25];
+
+            % Create SNRdBEditFieldLabel
+            app.SNRdBEditFieldLabel = uilabel(app.UIFigure);
+            app.SNRdBEditFieldLabel.HorizontalAlignment = 'right';
+            app.SNRdBEditFieldLabel.Position = [571 352 46 22];
+            app.SNRdBEditFieldLabel.Text = 'SNRdB';
+
+            % Create SNRdBEditField
+            app.SNRdBEditField = uieditfield(app.UIFigure, 'numeric');
+            app.SNRdBEditField.Position = [632 352 100 22];
+
+            % Create Button_10
+            app.Button_10 = uibutton(app.UIFigure, 'push');
+            app.Button_10.ButtonPushedFcn = createCallbackFcn(app, @Button_10Pushed, true);
+            app.Button_10.Position = [492 349 51 25];
+            app.Button_10.Text = '清空';
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = testApp
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
